@@ -10,7 +10,7 @@
 
 # ### Import required libraries
 
-# In[50]:
+# In[1]:
 
 import os
 import cv2
@@ -25,9 +25,13 @@ get_ipython().magic('matplotlib inline')
 
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
+from sklearn.externals import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from scipy.ndimage.measurements import label
+
+CLASSIFIER_PICKLE = 'vehicle_classifier.pkl'
+SCALER_PICKLE = 'scaler.pkl'
 
 
 # In[2]:
@@ -46,7 +50,7 @@ def visualize(fig, rows, cols, imgs, titles):
 
 # ### Load image file names
 
-# In[3]:
+# In[15]:
 
 # load image file names
 class_data = [
@@ -80,7 +84,7 @@ print('{}: {} images.'.format(class_data[1]['name'],
 
 # ### 1. HOG features
 
-# In[4]:
+# In[3]:
 
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, 
                         vis=False, feature_vec=True):
@@ -95,7 +99,7 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block,
 
 # ### 2. Binned color features
 
-# In[5]:
+# In[4]:
 
 # Down sampling
 def bin_spatial(img, size=(32, 32), skip=False):
@@ -106,7 +110,7 @@ def bin_spatial(img, size=(32, 32), skip=False):
 
 # ### 3. Color histogram features
 
-# In[6]:
+# In[5]:
 
 def color_hist(img, nbins=32, skip=False):
     if skip: return []
@@ -123,7 +127,7 @@ def color_hist(img, nbins=32, skip=False):
 
 # ### Feature extraction
 
-# In[9]:
+# In[6]:
 
 def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
         hist_bins=32, orient=9, pix_per_cell=8, cell_per_block=2, 
@@ -206,7 +210,7 @@ def single_img_features(file_or_img, color_space='RGB', spatial_size=(32, 32),
 
 # ### Visualization
 
-# In[10]:
+# In[8]:
 
 # Read in cars and notcars
 cars    = np.array(class_data[0]['filenames'])
@@ -218,7 +222,7 @@ notcar_file = notcars[np.random.randint(0, len(notcars))]
 args = {
     'color_space'    : 'YCrCb',    #: Color space: RGB, HSV, LUV, HLS, YUV, YCrCb
     'spatial_size'   : (32, 32), #: Spatial binning dimensions
-    'hist_bins'      : 16,       #: Number of histogram bins
+    'hist_bins'      : 32,       #: Number of histogram bins
 
     'orient'         : 9,        #: HOG orientations
     'pix_per_cell'   : 8,        #: HOG pixels per cell
@@ -243,10 +247,7 @@ visualize(fig, 1, 4, images, titles)
 
 # ## Train classifier
 
-# In[11]:
-
-from sklearn.externals import joblib
-CLASSIFIER_PICKLE = 'vehicle_classifier.pkl'
+# In[17]:
 
 # Prepare data
 cars    = np.array(class_data[0]['filenames'])
@@ -256,7 +257,7 @@ notcars = np.array(class_data[1]['filenames'])
 args = {
     'color_space'    : 'YCrCb',    #: Color space: RGB, HSV, LUV, HLS, YUV, YCrCb
     'spatial_size'   : (32, 32), #: Spatial binning dimensions
-    'hist_bins'      : 16,       #: Number of histogram bins
+    'hist_bins'      : 32,       #: Number of histogram bins
 
     'orient'         : 9,        #: HOG orientations
     'pix_per_cell'   : 8,        #: HOG pixels per cell
@@ -278,6 +279,7 @@ print('Processing time: {} s'.format(round(t2-t, 2)))
 # Apply scaler
 X = np.vstack((car_features, notcar_features)).astype(np.float64)
 X_scaler = StandardScaler().fit(X)
+joblib.dump(X_scaler, SCALER_PICKLE)
 scaled_X = X_scaler.transform(X)
 
 # Define the labels vector
@@ -314,7 +316,7 @@ print('Test Accuracy of SVC = ',
 
 # ### Sliding window
 
-# In[12]:
+# In[7]:
 
 def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None], 
                     xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
@@ -369,7 +371,7 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
 
 # ### Search from windows
 
-# In[13]:
+# In[8]:
 
 def search_windows(img, windows, clf, scaler, color_space='RGB', 
                     spatial_size=(32, 32), hist_bins=32, 
@@ -417,13 +419,14 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
 
 # ### Heat map
 
-# In[53]:
+# In[9]:
 
 def add_heat(heatmap, bbox_list):
     # Iterate through list of bboxes
     for box in bbox_list:
         # Add += 1 for all pixels inside each bbox
-        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+        heatmap[box[0][1]:box[1][1], 
+                box[0][0]:box[1][0]] += 1
     
     # Return updated heatmap
     return heatmap
@@ -443,7 +446,8 @@ def draw_labeled_bboxes(img, labels, color=(0,0,255), thick=6):
         nonzeroy = np.array(nonzero[0])
         nonzerox = np.array(nonzero[1])
         # Define a bounding box based on min/max x and y
-        bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        bbox = ((np.min(nonzerox), np.min(nonzeroy)),
+                (np.max(nonzerox), np.max(nonzeroy)))
         # Draw the box on the image
         cv2.rectangle(img, bbox[0], bbox[1], color, thick)
     # Return the image
@@ -452,14 +456,15 @@ def draw_labeled_bboxes(img, labels, color=(0,0,255), thick=6):
 
 # ### Visualization
 
-# In[52]:
+# In[18]:
 
 svc = joblib.load(CLASSIFIER_PICKLE)
+X_scaler = joblib.load(SCALER_PICKLE)
 
 args = {
     'color_space'    : 'YCrCb',  #: Color space: RGB, HSV, LUV, HLS, YUV, YCrCb
     'spatial_size'   : (32, 32), #: Spatial binning dimensions
-    'hist_bins'      : 16,       #: Number of histogram bins
+    'hist_bins'      : 32,       #: Number of histogram bins
 
     'orient'         : 9,        #: HOG orientations
     'pix_per_cell'   : 8,        #: HOG pixels per cell
@@ -471,12 +476,22 @@ args = {
     'hog_feat'       : True,     #: HOG features on or off
 }
 
-slide_win_args = {
-    'x_start_stop' : [None, None],
-    'y_start_stop' : [400, None],
-    'xy_window'    : (128, 128),
-    'xy_overlap'   : (0.5, 0.5)
-}
+slide_win_args_set = [
+    {
+        'x_start_stop' : [None, None],
+        'y_start_stop' : [450, 600],
+        'xy_window'    : (64, 64),
+        'xy_overlap'   : (0.9, 0.7)
+    },
+    {
+        'x_start_stop' : [None, None],
+        'y_start_stop' : [400, None],
+        'xy_window'    : (128, 128),
+        'xy_overlap'   : (0.9, 0.7)
+    }
+]
+
+HEATMAP_THRESH = 2
 
 images = []
 titles = []
@@ -489,14 +504,17 @@ for idx, file in enumerate(glob.glob('test_images/*')):
     if file.endswith('.jpg'):
         image = image.astype(np.float32)/255
 
-    # Run sliding window
-    windows = slide_window(image, **slide_win_args)
-    hot_windows = search_windows(image, windows, svc, X_scaler, **args)
-    #window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
-    
+    hot_windows = []
+    # Run sliding window in different scales
+    for slide_win_args in slide_win_args_set:
+        # Run sliding window
+        windows = slide_window(image, **slide_win_args)
+        hot_wins = search_windows(image, windows, svc, X_scaler, **args)
+        hot_windows.extend(hot_wins)
+        
     # Add heat map
     heatmap = add_heat(heatmap, hot_windows)
-    #heatmap = apply_threshold(heatmap, 1)
+    heatmap = apply_threshold(heatmap, HEATMAP_THRESH)
     labels = label(heatmap)
     
     window_img = draw_labeled_bboxes(draw_image, labels)
@@ -513,13 +531,14 @@ visualize(fig, 8, 2, images, titles)
 # 
 # # Video
 
-# In[59]:
+# ### Prepare arguments
 
-# Prepare arguments
+# In[34]:
+
 args = {
     'color_space'    : 'YCrCb',  #: Color space: RGB, HSV, LUV, HLS, YUV, YCrCb
     'spatial_size'   : (32, 32), #: Spatial binning dimensions
-    'hist_bins'      : 16,       #: Number of histogram bins
+    'hist_bins'      : 32,       #: Number of histogram bins
 
     'orient'         : 9,        #: HOG orientations
     'pix_per_cell'   : 8,        #: HOG pixels per cell
@@ -531,38 +550,72 @@ args = {
     'hog_feat'       : True,     #: HOG features on or off
 }
 
-slide_win_args = {
-    'x_start_stop' : [None, None],
-    'y_start_stop' : [400, None],
-    'xy_window'    : (128, 128),
-    'xy_overlap'   : (0.5, 0.5)
-}
+slide_win_args_set = [ 
+    {
+        'x_start_stop' : [None, None],
+        'y_start_stop' : [400, 600],
+        'xy_window'    : (96, 96),
+        'xy_overlap'   : (0.75, 0.75)
+    }
+]
+
+HEATMAP_THRESH = 8
 
 svc = joblib.load(CLASSIFIER_PICKLE)
+X_scaler = joblib.load(SCALER_PICKLE)
 
+
+# In[35]:
+
+class FrameTracker:
+    def __init__(self, size=10):
+        self.frames = []
+        self.size = size
+        
+    def insert(self, frame):
+        if len(self.frames) >= self.size:
+            self.frames.pop(0)
+        self.frames.append(frame)
+    
+    def combined_frame(self):
+        all_frames = np.array(self.frames)
+        return np.sum(all_frames, axis=0)
+    
 def process_image(image):
-
+    
     draw_image = np.copy(image)
     image = image.astype(np.float32) / 255
     heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
 
-    # Run sliding window
-    windows = slide_window(image, **slide_win_args)
-    hot_windows = search_windows(image, windows, svc, X_scaler, **args)
-
+    hot_windows = []
+    # Run sliding window in different scales
+    for slide_win_args in slide_win_args_set:
+        windows = slide_window(image, **slide_win_args)
+        hot_wins = search_windows(image, windows, svc, X_scaler, **args)
+        hot_windows.extend(hot_wins)
+        
     # Add heat map
     heatmap = add_heat(heatmap, hot_windows)
-    #heatmap = apply_threshold(heatmap, 1)
+    
+    # Smoothing
+    process_image.tracker.insert(heatmap)
+    combined = process_image.tracker.combined_frame()
+    
+    heatmap = apply_threshold(combined, HEATMAP_THRESH)
     labels = label(heatmap)
     
     result = draw_labeled_bboxes(draw_image, labels)
     return result
 
+process_image.tracker = FrameTracker(10)
 
-# In[61]:
+
+# In[36]:
+
+process_image.tracker = FrameTracker(10)
 
 from moviepy.editor import VideoFileClip
-clip = VideoFileClip('project_video.mp4')#.subclip(5)
+clip = VideoFileClip('project_video.mp4')
 new_clip = clip.fl_image(process_image)
 new_clip.write_videofile('project_video_output.mp4', audio=False)
 
