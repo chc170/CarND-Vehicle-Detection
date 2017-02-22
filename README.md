@@ -15,9 +15,9 @@ The goal of this project is to detect cars in a clip of video recorded on the hi
 
 [//]: # (Image References)
 [image1]: ./output_images/color_space.png
-[image2]: ./output_images/orient.jpg
-[image3]: ./output_images/pix_per_cell.jpg
-[image4]: ./output_images/cell_per_block.jpg
+[image2]: ./output_images/orient.png
+[image3]: ./output_images/pix_per_cell.png
+[image4]: ./output_images/cell_per_block.png
 [image5]: ./output_images/heatmap.png
 [video1]: ./project_video_output.mp4
 
